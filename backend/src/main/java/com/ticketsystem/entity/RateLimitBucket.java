@@ -60,9 +60,16 @@ public class RateLimitBucket {
     
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-        this.lastRefillAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = now;
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = now;
+        }
+        if (this.lastRefillAt == null) {
+            this.lastRefillAt = now;
+        }
     }
     
     @PreUpdate
@@ -71,14 +78,30 @@ public class RateLimitBucket {
     }
 
     public boolean shouldRefill() {
+        if (lastRefillAt == null) {
+            lastRefillAt = LocalDateTime.now();
+            return false;
+        }
+        
         LocalDateTime now = LocalDateTime.now();
         long secondsElapsed = java.time.Duration.between(lastRefillAt, now).getSeconds();
         return secondsElapsed >= windowDurationSeconds;
     }
     
     public void refill() {
+        if (lastRefillAt == null) {
+            lastRefillAt = LocalDateTime.now();
+            return;
+        }
+        
         LocalDateTime now = LocalDateTime.now();
-        long windowsPassed = java.time.Duration.between(lastRefillAt, now).getSeconds() / windowDurationSeconds;
+        long secondsElapsed = java.time.Duration.between(lastRefillAt, now).getSeconds();
+        
+        if (secondsElapsed < windowDurationSeconds) {
+            return;
+        }
+        
+        long windowsPassed = secondsElapsed / windowDurationSeconds;
         
         if (windowsPassed > 0) {
             int tokensToAdd = (int) (windowsPassed * refillRate);

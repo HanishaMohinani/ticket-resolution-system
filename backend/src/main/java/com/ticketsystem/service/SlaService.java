@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,12 +17,10 @@ import com.ticketsystem.exception.ResourceNotFoundException;
 import com.ticketsystem.repository.SlaRuleRepository;
 import com.ticketsystem.repository.TicketRepository;
 
-/**
- * SLA Service
- * Manages SLA rules and calculates SLA deadlines
- */
 @Service
 public class SlaService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(SlaService.class);
     
     @Autowired
     private SlaRuleRepository slaRuleRepository;
@@ -28,29 +28,35 @@ public class SlaService {
     @Autowired
     private TicketRepository ticketRepository;
     
-    /**
-     * Calculate and set SLA deadlines for a ticket
-     */
     @Transactional
     public void calculateSlaDeadlines(Ticket ticket) {
+        if (ticket == null) {
+            logger.error("calculateSlaDeadlines called with null ticket");
+            return;
+        }
+        
+        logger.debug("Calculating SLA for ticket {}, createdAt: {}", ticket.getId(), ticket.getCreatedAt());
+        
+        if (ticket.getCreatedAt() == null) {
+            logger.error("Ticket {} has null createdAt! Setting to now.", ticket.getId());
+            ticket.setCreatedAt(LocalDateTime.now());
+        }
+        
         SlaRule slaRule = slaRuleRepository
                 .findByCompanyIdAndPriority(ticket.getCompany().getId(), ticket.getPriority())
                 .orElseThrow(() -> new ResourceNotFoundException(
                     "SLA Rule not found for priority: " + ticket.getPriority()));
         
-        // Use current time if createdAt is null (will be set by @PrePersist)
-        LocalDateTime now = ticket.getCreatedAt() != null ? ticket.getCreatedAt() : LocalDateTime.now();
+        LocalDateTime baseTime = ticket.getCreatedAt() != null ? 
+                                 ticket.getCreatedAt() : LocalDateTime.now();
         
-        // Set response deadline
-        ticket.setSlaResponseDueAt(now.plusHours(slaRule.getResponseTimeHours()));
+        ticket.setSlaResponseDueAt(baseTime.plusHours(slaRule.getResponseTimeHours()));
+        ticket.setSlaResolutionDueAt(baseTime.plusHours(slaRule.getResolutionTimeHours()));
         
-        // Set resolution deadline
-        ticket.setSlaResolutionDueAt(now.plusHours(slaRule.getResolutionTimeHours()));
+        logger.debug("SLA calculated - Response due: {}, Resolution due: {}", 
+                     ticket.getSlaResponseDueAt(), ticket.getSlaResolutionDueAt());
     }
     
-    /**
-     * Check if ticket has breached SLA
-     */
     public boolean checkSlaBreach(Ticket ticket) {
         if (ticket.getSlaResolutionDueAt() == null) {
             return false;
@@ -69,32 +75,44 @@ public class SlaService {
         return breached;
     }
     
-    /**
-     * Check if ticket needs escalation (80% of time elapsed)
-     */
     public boolean checkEscalation(Ticket ticket) {
-        if (ticket.getEscalated() || ticket.getSlaResolutionDueAt() == null) {
+        if (ticket.getEscalated() || 
+            ticket.getSlaResolutionDueAt() == null || 
+            ticket.getCreatedAt() == null) {
+            
+            if (ticket.getCreatedAt() == null) {
+                logger.warn("Ticket {} has null createdAt, cannot check escalation", ticket.getId());
+            }
             return false;
         }
         
         LocalDateTime now = LocalDateTime.now();
-        long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionDueAt()).toMinutes();
-        long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
         
-        boolean needsEscalation = (double) elapsedMinutes / totalMinutes >= 0.8;
-        
-        if (needsEscalation) {
-            ticket.setEscalated(true);
-            ticket.setEscalatedAt(now);
-            ticketRepository.save(ticket);
+        try {
+            long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionDueAt()).toMinutes();
+            long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
+            
+            // Prevent division by zero
+            if (totalMinutes <= 0) {
+                logger.warn("Ticket {} has invalid SLA time window", ticket.getId());
+                return false;
+            }
+            
+            boolean needsEscalation = (double) elapsedMinutes / totalMinutes >= 0.8;
+            
+            if (needsEscalation) {
+                ticket.setEscalated(true);
+                ticket.setEscalatedAt(now);
+                ticketRepository.save(ticket);
+            }
+            
+            return needsEscalation;
+        } catch (Exception e) {
+            logger.error("Error checking escalation for ticket {}: {}", ticket.getId(), e.getMessage());
+            return false;
         }
-        
-        return needsEscalation;
     }
     
-    /**
-     * Get minutes remaining until SLA breach
-     */
     public Long getMinutesUntilDue(Ticket ticket) {
         if (ticket.getSlaResolutionDueAt() == null) {
             return null;
@@ -102,28 +120,26 @@ public class SlaService {
         
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(ticket.getSlaResolutionDueAt())) {
-            return 0L; // Already breached
+            return 0L;
         }
         
         return Duration.between(now, ticket.getSlaResolutionDueAt()).toMinutes();
     }
     
-    /**
-     * Check all tickets for SLA breaches and escalations
-     */
     @Transactional
     public void checkAllTicketsSla() {
         List<Ticket> activeTickets = ticketRepository.findTicketsNeedingEscalation();
         
         for (Ticket ticket : activeTickets) {
-            checkSlaBreach(ticket);
-            checkEscalation(ticket);
+            try {
+                checkSlaBreach(ticket);
+                checkEscalation(ticket);
+            } catch (Exception e) {
+                logger.error("Error checking SLA for ticket {}: {}", ticket.getId(), e.getMessage());
+            }
         }
     }
     
-    /**
-     * Create default SLA rules for a company
-     */
     @Transactional
     public void createDefaultSlaRules(Long companyId) {
         // CRITICAL priority

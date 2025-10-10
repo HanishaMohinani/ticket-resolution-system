@@ -94,8 +94,12 @@ public class Ticket {
     
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = LocalDateTime.now();
+        }
     }
     
     @PreUpdate
@@ -112,13 +116,21 @@ public class Ticket {
     }
     
     public boolean needsEscalation() {
-        if (slaResolutionDueAt == null || escalated) {
+        if (slaResolutionDueAt == null || escalated || createdAt == null) {
             return false;
         }
         
-        long totalMinutes = java.time.Duration.between(createdAt, slaResolutionDueAt).toMinutes();
-        long elapsedMinutes = java.time.Duration.between(createdAt, LocalDateTime.now()).toMinutes();
-        
-        return (double) elapsedMinutes / totalMinutes >= 0.8;
+        try {
+            long totalMinutes = java.time.Duration.between(createdAt, slaResolutionDueAt).toMinutes();
+            long elapsedMinutes = java.time.Duration.between(createdAt, LocalDateTime.now()).toMinutes();
+            
+            if (totalMinutes <= 0) {
+                return false;
+            }
+            
+            return (double) elapsedMinutes / totalMinutes >= 0.8;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

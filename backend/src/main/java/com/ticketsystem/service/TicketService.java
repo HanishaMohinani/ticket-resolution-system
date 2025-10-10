@@ -5,6 +5,8 @@ import java.time.Year;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +29,10 @@ import com.ticketsystem.repository.TicketHistoryRepository;
 import com.ticketsystem.repository.TicketRepository;
 import com.ticketsystem.repository.UserRepository;
 
-/**
- * Ticket Service - Core business logic for ticket management
- */
 @Service
 public class TicketService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(TicketService.class);
     
     @Autowired
     private TicketRepository ticketRepository;
@@ -51,17 +52,15 @@ public class TicketService {
     @Autowired
     private SlaService slaService;
     
-    /**
-     * Create a new ticket
-     */
     @Transactional
     public TicketResponse createTicket(CreateTicketRequest request) {
         User customer = authService.getCurrentUser();
         
-        // Generate unique ticket number
         String ticketNumber = generateTicketNumber();
+        LocalDateTime now = LocalDateTime.now();
         
-        // Create ticket
+        logger.info("Creating ticket with number: {}, createdAt will be: {}", ticketNumber, now);
+        
         Ticket ticket = Ticket.builder()
                 .ticketNumber(ticketNumber)
                 .title(request.getTitle())
@@ -72,40 +71,49 @@ public class TicketService {
                 .company(customer.getCompany())
                 .slaBreached(false)
                 .escalated(false)
+                .createdAt(now)  // Explicitly set createdAt
+                .updatedAt(now)  // Explicitly set updatedAt
                 .build();
         
-        // Save ticket first to trigger @PrePersist (sets createdAt)
+        logger.debug("Ticket object created, createdAt before save: {}", ticket.getCreatedAt());
+        
+        // Save the ticket first
         ticket = ticketRepository.save(ticket);
         
-        // Now calculate SLA deadlines (after createdAt is set)
-        slaService.calculateSlaDeadlines(ticket);
+        logger.debug("Ticket saved with ID: {}, createdAt after save: {}", ticket.getId(), ticket.getCreatedAt());
         
-        // Save again with SLA deadlines
-        ticket = ticketRepository.save(ticket);
+        // Flush to ensure the ticket is persisted and @PrePersist has been called
+        ticketRepository.flush();
         
-        // Create history entry
+        logger.debug("Repository flushed, createdAt after flush: {}", ticket.getCreatedAt());
+        
+        // Now calculate SLA - createdAt is guaranteed to be set
+        try {
+            slaService.calculateSlaDeadlines(ticket);
+            ticket = ticketRepository.save(ticket);
+            logger.debug("SLA calculated successfully");
+        } catch (Exception e) {
+            logger.error("Failed to calculate SLA for ticket {}: {}", ticket.getId(), e.getMessage(), e);
+            throw e; // Re-throw to see the full stack trace
+        }
+        
         createHistoryEntry(ticket, customer, "Ticket created", ChangeType.CREATED);
+        
+        logger.info("Ticket {} created successfully", ticket.getId());
         
         return convertToResponse(ticket);
     }
     
-    /**
-     * Get ticket by ID
-     */
     public TicketResponse getTicketById(Long ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket", "id", ticketId));
         
-        // Check access permission
         User currentUser = authService.getCurrentUser();
         validateTicketAccess(ticket, currentUser);
         
         return convertToResponse(ticket);
     }
     
-    /**
-     * Get tickets for customer (my tickets)
-     */
     public List<TicketResponse> getMyTickets() {
         User customer = authService.getCurrentUser();
         List<Ticket> tickets = ticketRepository.findByCustomerId(customer.getId());
@@ -115,9 +123,6 @@ public class TicketService {
                 .collect(Collectors.toList());
     }
     
-    /**
-     * Get tickets assigned to agent
-     */
     public List<TicketResponse> getAssignedTickets() {
         User agent = authService.getCurrentUser();
         List<Ticket> tickets = ticketRepository.findByAssignedAgentId(agent.getId());
@@ -127,9 +132,6 @@ public class TicketService {
                 .collect(Collectors.toList());
     }
     
-    /**
-     * Get all tickets for company (for managers/admins)
-     */
     public List<TicketResponse> getAllTickets() {
         User user = authService.getCurrentUser();
         List<Ticket> tickets = ticketRepository.findByCompanyId(user.getCompany().getId());
@@ -139,9 +141,6 @@ public class TicketService {
                 .collect(Collectors.toList());
     }
     
-    /**
-     * Update ticket
-     */
     @Transactional
     public TicketResponse updateTicket(Long ticketId, UpdateTicketRequest request) {
         Ticket ticket = ticketRepository.findById(ticketId)
@@ -149,7 +148,6 @@ public class TicketService {
         
         User currentUser = authService.getCurrentUser();
         
-        // Update fields if provided
         if (request.getTitle() != null) {
             String oldValue = ticket.getTitle();
             ticket.setTitle(request.getTitle());
@@ -165,17 +163,18 @@ public class TicketService {
             ticket.setPriority(TicketPriority.valueOf(request.getPriority().toUpperCase()));
             createHistoryEntry(ticket, currentUser, "priority", oldValue, request.getPriority(), ChangeType.UPDATED);
             
-            // Recalculate SLA for new priority
-            slaService.calculateSlaDeadlines(ticket);
+            // Recalculate SLA with new priority
+            try {
+                slaService.calculateSlaDeadlines(ticket);
+            } catch (Exception e) {
+                logger.error("Failed to recalculate SLA for ticket {}: {}", ticket.getId(), e.getMessage(), e);
+            }
         }
         
         ticket = ticketRepository.save(ticket);
         return convertToResponse(ticket);
     }
     
-    /**
-     * Update ticket status
-     */
     @Transactional
     public TicketResponse updateTicketStatus(Long ticketId, String newStatus) {
         Ticket ticket = ticketRepository.findById(ticketId)
@@ -186,7 +185,6 @@ public class TicketService {
         
         ticket.setStatus(TicketStatus.valueOf(newStatus.toUpperCase()));
         
-        // Set timestamps based on status
         if (newStatus.equalsIgnoreCase("RESOLVED")) {
             ticket.setResolvedAt(LocalDateTime.now());
         } else if (newStatus.equalsIgnoreCase("CLOSED")) {
@@ -195,15 +193,11 @@ public class TicketService {
         
         ticket = ticketRepository.save(ticket);
         
-        // Create history entry
         createHistoryEntry(ticket, currentUser, "status", oldStatus, newStatus, ChangeType.STATUS_CHANGED);
         
         return convertToResponse(ticket);
     }
     
-    /**
-     * Assign ticket to agent
-     */
     @Transactional
     public TicketResponse assignTicket(Long ticketId, Long agentId) {
         Ticket ticket = ticketRepository.findById(ticketId)
@@ -212,7 +206,6 @@ public class TicketService {
         User agent = userRepository.findById(agentId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", agentId));
         
-        // Verify agent role
         if (agent.getRole() != UserRole.AGENT && agent.getRole() != UserRole.MANAGER) {
             throw new BadRequestException("User is not an agent or manager");
         }
@@ -229,18 +222,12 @@ public class TicketService {
         return convertToResponse(ticket);
     }
     
-    /**
-     * Generate unique ticket number
-     */
     private String generateTicketNumber() {
         int year = Year.now().getValue();
         long count = ticketRepository.count() + 1;
         return String.format("TKT-%d-%06d", year, count);
     }
     
-    /**
-     * Create ticket history entry
-     */
     private void createHistoryEntry(Ticket ticket, User user, String description, ChangeType changeType) {
         TicketHistory history = TicketHistory.builder()
                 .ticket(ticket)
@@ -254,9 +241,6 @@ public class TicketService {
         ticketHistoryRepository.save(history);
     }
     
-    /**
-     * Create detailed history entry
-     */
     private void createHistoryEntry(Ticket ticket, User user, String fieldName, 
                                     String oldValue, String newValue, ChangeType changeType) {
         TicketHistory history = TicketHistory.builder()
@@ -271,11 +255,7 @@ public class TicketService {
         ticketHistoryRepository.save(history);
     }
     
-    /**
-     * Validate if user has access to ticket
-     */
     private void validateTicketAccess(Ticket ticket, User user) {
-        // Admin and Manager can see all tickets in company
         if (user.getRole() == UserRole.ADMIN || user.getRole() == UserRole.MANAGER) {
             if (!ticket.getCompany().getId().equals(user.getCompany().getId())) {
                 throw new UnauthorizedException("You don't have access to this ticket");
@@ -283,7 +263,6 @@ public class TicketService {
             return;
         }
         
-        // Agent can see assigned tickets
         if (user.getRole() == UserRole.AGENT) {
             if (ticket.getAssignedAgent() != null && 
                 ticket.getAssignedAgent().getId().equals(user.getId())) {
@@ -291,7 +270,6 @@ public class TicketService {
             }
         }
         
-        // Customer can only see their own tickets
         if (user.getRole() == UserRole.CUSTOMER) {
             if (ticket.getCustomer().getId().equals(user.getId())) {
                 return;
@@ -301,12 +279,23 @@ public class TicketService {
         throw new UnauthorizedException("You don't have access to this ticket");
     }
     
-    /**
-     * Convert Ticket entity to TicketResponse DTO
-     */
     private TicketResponse convertToResponse(Ticket ticket) {
         Long commentCount = commentRepository.countByTicketId(ticket.getId());
-        Long minutesUntilDue = slaService.getMinutesUntilDue(ticket);
+        Long minutesUntilDue = null;
+        Boolean isOverdue = false;
+        
+        try {
+            minutesUntilDue = slaService.getMinutesUntilDue(ticket);
+        } catch (Exception e) {
+            logger.error("Error calculating minutes until due for ticket {}: {}", ticket.getId(), e.getMessage());
+        }
+        
+        try {
+            isOverdue = ticket.isOverdue();
+        } catch (Exception e) {
+            logger.error("Error calculating isOverdue for ticket {}: {}", ticket.getId(), e.getMessage(), e);
+            isOverdue = false;
+        }
         
         return TicketResponse.builder()
                 .id(ticket.getId())
@@ -330,7 +319,7 @@ public class TicketService {
                 .firstResponseAt(ticket.getFirstResponseAt())
                 .resolvedAt(ticket.getResolvedAt())
                 .commentCount(commentCount.intValue())
-                .isOverdue(ticket.isOverdue())
+                .isOverdue(isOverdue)
                 .build();
     }
 }
