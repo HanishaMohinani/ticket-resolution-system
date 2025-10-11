@@ -1,70 +1,290 @@
-# Getting Started with Create React App
+# Ticket Resolution System - Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A modern, responsive React application for managing support tickets with role-based dashboards, real-time SLA tracking, and comprehensive analytics.
 
-## Available Scripts
+## 🚀 Tech Stack
 
-In the project directory, you can run:
+- **Framework**: React 18.2.0
+- **Routing**: React Router DOM 6.x
+- **HTTP Client**: Axios
+- **Charts**: Recharts
+- **Styling**: CSS3 (Custom)
+- **Build Tool**: Create React App
 
-### `npm start`
+## ✨ Features
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### Customer Features
+- 📝 Create support tickets with priority levels
+- 📋 View personal tickets (My Tickets)
+- 💬 Add comments to tickets
+- 🔔 Track ticket status in real-time
+- ⏰ View SLA deadlines
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Agent Features
+- 📌 View assigned tickets
+- 🔄 Update ticket status (Open → In Progress → Resolved → Closed)
+- 💬 Respond to customers via comments
+- 📊 Personal performance dashboard
+- ⚠️ SLA breach alerts
 
-### `npm test`
+### Manager/Admin Features
+- 📊 Comprehensive analytics dashboard
+- 📈 Visual charts (Bar & Pie charts)
+- 👥 Team performance metrics
+- 🎯 SLA compliance tracking
+- 🔧 Assign tickets to agents
+- 📋 View all company tickets
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### General Features
+- 🔐 Secure JWT authentication
+- 🎨 Modern, clean UI design
+- 📱 Fully responsive (mobile, tablet, desktop)
+- 🔍 Advanced search and filtering
+- 🎨 Color-coded priorities and statuses
+- ⚡ Real-time updates
 
-### `npm run build`
+## 🛠️ Prerequisites
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- Node.js 14+ or higher
+- npm 6+ or yarn 1.22+
+- Running backend on `http://localhost:8080`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 📦 Installation
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### 1. Clone the Repository
+```bash
+git clone https://github.com/HanishaMohinani/ticket-resolution-system.git
+cd ticket-resolution-system/frontend
+```
 
-### `npm run eject`
+### 2. Install Dependencies
+```bash
+npm install
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Or with yarn:
+```bash
+yarn install
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 3. Configure API URL
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+The API URL is configured in `src/services/api.js`:
+```javascript
+const API_BASE_URL = 'http://localhost:8080/api';
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### 4. Start Development Server
+```bash
+npm start
+```
 
-## Learn More
+The app will open at `http://localhost:3000`
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🔑 Demo Credentials
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Quick login with pre-seeded accounts:
 
-### Code Splitting
+| Role     | Email                | Password     | Access                           |
+|----------|---------------------|--------------|----------------------------------|
+| Admin    | admin@acme.com      | password123  | Full system access               |
+| Manager  | manager@acme.com    | password123  | All tickets, analytics, assign   |
+| Agent    | agent1@acme.com     | password123  | Assigned tickets, update status  |
+| Customer | customer1@acme.com  | password123  | Create & view own tickets        |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## 🎨 Features by Role
 
-### Analyzing the Bundle Size
+### Customer Dashboard
+- Personal ticket statistics
+- Recent tickets table
+- Quick access to create ticket
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Agent Dashboard
+- Assigned tickets count
+- Resolved tickets count
+- Overdue tickets alert
+- SLA compliance rate
+- Personal performance metrics
 
-### Making a Progressive Web App
+### Manager/Admin Dashboard
+- Total tickets overview
+- Status breakdown (Open, In Progress, Resolved, Closed)
+- Priority distribution
+- Interactive charts:
+  - **Bar Chart**: Tickets by Status
+  - **Pie Chart**: Tickets by Priority
+- Team performance metrics
+- Company-wide SLA compliance
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## 🔌 API Integration
 
-### Advanced Configuration
+### Authentication Endpoints
+```javascript
+POST /api/auth/login      - User login
+POST /api/auth/register   - User registration
+GET  /api/auth/me         - Get current user
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### Ticket Endpoints
+```javascript
+POST /api/tickets                   - Create ticket
+GET  /api/tickets/my-tickets        - Get customer tickets
+GET  /api/tickets/assigned          - Get agent tickets
+GET  /api/tickets                   - Get all tickets
+GET  /api/tickets/{id}              - Get ticket details
+PUT  /api/tickets/{id}/status       - Update status
+PUT  /api/tickets/{id}/assign       - Assign to agent
+```
 
-### Deployment
+### Comment Endpoints
+```javascript
+POST /api/tickets/{id}/comments     - Add comment
+GET  /api/tickets/{id}/comments     - Get comments
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### Dashboard Endpoints
+```javascript
+GET  /api/dashboard/stats           - Manager stats
+GET  /api/dashboard/agent           - Agent stats
+```
 
-### `npm run build` fails to minify
+## 🎯 Usage Guide
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### For Customers
+
+1. **Login** with customer credentials
+2. Click **"Create Ticket"** in navbar
+3. Fill in:
+   - Title (required)
+   - Description (required)
+   - Priority (Low, Medium, High, Critical)
+4. Click **"Create Ticket"**
+5. View in **"My Tickets"**
+6. Click ticket to view details and add comments
+
+### For Agents
+
+1. **Login** with agent credentials
+2. Click **"Assigned Tickets"** in navbar
+3. Click on a ticket to open details
+4. Update status using buttons:
+   - **Open** → **In Progress** → **Resolved** → **Closed**
+5. Add comments to communicate with customer
+6. Monitor SLA deadlines
+
+### For Managers/Admins
+
+1. **Login** with manager/admin credentials
+2. View comprehensive **Dashboard** with charts
+3. Click **"All Tickets"** to see company tickets
+4. Click ticket to:
+   - View details
+   - Assign to agents
+   - Update status
+5. Monitor team performance in dashboard
+
+## 🎨 Color Coding
+
+### Status Colors
+- 🔵 **Open**: Blue
+- 🟡 **In Progress**: Yellow/Orange
+- 🟢 **Resolved**: Green
+- ⚪ **Closed**: Gray
+
+### Priority Colors
+- 🟢 **Low**: Green
+- 🟡 **Medium**: Yellow
+- 🟠 **High**: Orange
+- 🔴 **Critical**: Red
+
+### SLA Indicators
+- ✅ **On Time**: Normal display
+- ⚠️ **At Risk**: Orange warning (80% time elapsed)
+- 🚨 **Breached**: Red alert
+
+## 🚀 Build & Deployment
+
+### Development Build
+```bash
+npm start
+```
+
+### Production Build
+```bash
+npm run build
+```
+
+This creates an optimized build in the `build/` folder.
+
+### Serve Production Build
+```bash
+npm install -g serve
+serve -s build -p 3000
+```
+
+## 🧪 Testing
+
+### Run Tests
+```bash
+npm test
+```
+
+### Run Tests with Coverage
+```bash
+npm test -- --coverage
+```
+
+## 🐛 Troubleshooting
+
+### Backend Connection Error
+```
+Error: Network Error
+```
+**Solution**: Ensure backend is running on `http://localhost:8080`
+
+### Login Failed
+```
+Error: Login failed
+```
+**Solutions**:
+1. Check backend is running
+2. Verify credentials
+3. Clear localStorage: `localStorage.clear()`
+4. Check browser console for CORS errors
+
+### Blank Dashboard
+**Solutions**:
+1. Check if you're logged in
+2. Verify role permissions
+3. Check API responses in Network tab (F12)
+4. Clear cache and reload (Ctrl+Shift+R)
+
+### Charts Not Displaying
+**Solution**: Ensure recharts is installed:
+```bash
+npm install recharts
+```
+
+## 🔐 Security Features
+
+- JWT token stored in localStorage
+- Automatic token inclusion in API calls
+- Auto-logout on 401 errors
+- Protected routes based on authentication
+- Role-based UI rendering
+
+## 📝 Scripts
+
+```bash
+npm start          # Start development server
+npm run build      # Create production build
+npm test           # Run tests
+npm run eject      # Eject from Create React App (one-way)
+```
+
+## 🔄 State Management
+
+Uses React Context API:
+- **AuthContext**: User authentication state
+- localStorage for token persistence
+- Component-level state with useState
